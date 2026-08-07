@@ -1,0 +1,27 @@
+# Maven build output
+backend/target/
+**/target/
+*.class
+
+# Node / Vite build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# IDE Configuration
+.idea/
+*.iml
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Local environment variables
+.env
+.env.local
+.env.production
