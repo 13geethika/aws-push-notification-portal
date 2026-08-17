@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-const BACKEND_API_URL = "http://localhost:5000/api";
+const BACKEND_API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 interface ChatMessage {
   id: string;

@@ -1,59 +1,55 @@
-CHANGES LOG: ASYNCHRONOUS SQS + LAMBDA UPGRADE
-===============================================
+CHANGES LOG: SERVERLESS UPGRADE (API GATEWAY + SQS DLQ + LAMBDA IaC)
+====================================================================
 
-This file documents the architectural changes made to transition the AWS Push Notification Portal from a synchronous delivery pattern (Spring Boot calling SNS directly) to an asynchronous, event-driven pattern (Spring Boot enqueuing to SQS -> Lambda consuming and triggering SNS -> CloudWatch Logging).
-
----
-
-1. ARCHITECTURAL TRANSITION
----------------------------
-* Old Flow:
-  React Client -> Spring Boot Backend (blocking thread) -> AWS SNS -> FCM -> Browser.
-  (Limitation: The backend thread is held open while waiting for third-party endpoints to complete registration and publication).
-
-* New Flow:
-  React Client -> Spring Boot Backend -> Amazon SQS Queue (immediate success response)
-                                      |
-                                      +--> (Automatic SQS trigger)
-                                      |
-                                      +--> AWS Lambda Worker (asynchronous processing)
-                                                    |
-                                                    +--> AWS SNS -> FCM -> Browser
-                                                    |
-                                                    +--> (Execution logs)
-                                                    |
-                                                    +--> Amazon CloudWatch Logs
+This log details the complete architectural transition of the AWS Push Notification Portal. The infrastructure is now fully serverless and managed via AWS CloudFormation.
 
 ---
 
-2. FILE CHANGES LOG (SPRING BOOT BACKEND)
-----------------------------------------
-* pom.xml:
-  - Removed dependency: 'software.amazon.awssdk:sns'
-  - Added dependency: 'software.amazon.awssdk:sqs'
-  (Decoupled the backend project completely from AWS SNS SDK modules).
+1. ARCHITECTURAL FLOW COMPARISON
+--------------------------------
+* Current Client-Server Model (Spring Boot):
+  React Client -> Spring Boot (local / ngrok) -> SQS -> SQS Worker Lambda -> SNS -> FCM.
+  (Uses a local Java web server as a gateway proxy to AWS).
 
-* application.properties:
-  - Removed property: 'aws.platformApplicationArn' (now handled inside AWS Lambda environment).
-  - Added property: 'aws.sqsQueueUrl=${AWS_SQS_QUEUE_URL:}' (directing messages to your SQS queue).
-
-* AwsConfig.java:
-  - Replaced the 'SnsClient' Bean with an 'SqsClient' Bean.
-  - Implemented thread-safe singleton connection pooling for SQS to reduce latency.
-
-* NotificationController.java:
-  - Refactored '/api/register' to return a successful mock response directly back to the React UI, bypassing synchronous registration latency.
-  - Refactored '/api/send' to serialize the incoming device token and message text into a JSON string, then enqueues it to the SQS queue using 'sqsClient.sendMessage()'. 
+* Modern Event-Driven Serverless Model (API Gateway + SQS DLQ):
+  React Client -> API Gateway (REST HTTP endpoint)
+                     ↓
+             PushApiLambda (restructures routes, loads Firebase config, enqueues SQS)
+                     ↓
+             Main SQS Queue ('push-notification-queue')
+                     ↓ (triggers)
+             PushNotificationWorker Lambda (SNS endpoint mapping & publish pushes)
+                     ↓
+                  Success -> SNS -> FCM -> Browser
+                     ↓
+                  Failure -> Retries (Up to 3 times) -> Dead-Letter Queue ('push-notification-dlq')
 
 ---
 
-3. INFRASTRUCTURE AS CODE (IaC) ADDITION
----------------------------------------
+2. FILE CHANGES LOG
+-------------------
 * template.yml (CloudFormation Template):
-  - Created a CloudFormation template in the repository root to automate the deployment of your AWS infrastructure.
-  - Provisions:
-    1. Amazon SQS Queue ('push-notification-queue') with a 30s visibility timeout.
-    2. IAM Execution Role ('push-lambda-execution-role') with narrow SQS polling, SNS publishing, and CloudWatch log writing permissions.
-    3. AWS Lambda Function ('PushNotificationWorker' on Node.js 22.x) with the message consumption, FCM v1 formatting, and SNS dispatch script embedded inline.
-    4. Event Source Mapping trigger linking SQS and Lambda.
-  - Dynamically extracts the AWS region from your configured 'PLATFORM_APPLICATION_ARN' to support multi-region queues automatically.
+  - Rewritten from scratch to declare all AWS resources in a single stack file:
+    1. 'PushNotificationDLQ': A dedicated SQS queue that isolates failed messages for troubleshooting.
+    2. 'PushNotificationQueue': The main SQS queue, integrated with the DLQ Redrive Policy (maxReceiveCount: 3).
+    3. 'PushLambdaExecutionRole': Single IAM execution role with permissions for SQS polling, SQS writing, SNS publishing, and CloudWatch logging.
+    4. 'PushApiLambda': Exposes Node.js serverless REST handlers for config serving, register mocks, and enqueuing tasks.
+    5. 'PushNotificationWorker': Node.js background process that maps endpoints and dispatches pushes via SNS.
+    6. 'SQSTriggerMapping': Links the main SQS queue as a trigger for the worker Lambda.
+    7. 'PushApiGateway': An API Gateway HTTP API that proxies all routes.
+    8. 'PushApiStage' & 'PushApiRoute': Sets up a default stage ('$default') routing proxy calls to 'PushApiLambda'.
+  - Added parameters for Firebase web keys and SNS Platform ARN to allow deploying isolated DEV, PROD, or DEBUG configurations easily.
+
+* Changes.txt (this file):
+  - Updated to track SQS DLQ, API Gateway, and CloudFormation automation details.
+
+---
+
+3. ENVIRONMENT PROFILE CONFIGURATION
+------------------------------------
+By writing a single template.yml file, you can now run a single command in AWS to create three isolated stacks for DEV, PROD, and DEBUG:
+- Stack: push-portal-dev (uses dev stage parameters)
+- Stack: push-portal-prod (uses prod stage parameters)
+- Stack: push-portal-debug (uses debug parameters)
+
+This guarantees consistent deployment across all environments under the AWS Free Tier.

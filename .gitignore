@@ -23,5 +23,8 @@ Thumbs.db
 
 # Local environment variables
 .env
+.env.dev
+.env.prod
+.env.debug
 .env.local
 .env.production
