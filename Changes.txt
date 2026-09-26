@@ -53,3 +53,43 @@ By writing a single template.yml file, you can now run a single command in AWS t
 - Stack: push-portal-debug (uses debug parameters)
 
 This guarantees consistent deployment across all environments under the AWS Free Tier.
+
+---
+
+4. DYNAMIC DEVICE TOKEN & DLQ RETRY FIX
+----------------------------------------
+* Frontend (NotificationPage.tsx):
+  - Previously, the send payload in handleSend was hardcoded as:
+    deviceToken: endpointArn || deviceToken.trim()
+    Because endpointArn was stored in state upon initial FCM load, any manual/random edits
+    typed by the user into the 'Device Token' input field were silently ignored and overwritten
+    by the valid endpointArn. This caused fake token tests (for retry count and DLQ) to still
+    send successfully with the real token instead of failing.
+  - Fixed to:
+    deviceToken: deviceToken.trim()
+    Now, the current value in the input field is dynamically sent every time.
+  - Added visual feedback ('Custom token entered (Dynamic)') in the UI when the user edits the token.
+* Worker Lambda (template.yml):
+  - Previously, AWS SNS CreatePlatformEndpoint/Publish accepts string metadata asynchronously without live
+    FCM verification, returning HTTP 200 to Lambda. SQS therefore considered the message successfully processed
+    and deleted it immediately, preventing it from reaching the DLQ.
+  - Added token format validation in PushNotificationWorker (Dev/Prod/Debug): If a device token is less than
+    50 characters or contains test/fail keywords, Lambda immediately throws a processing exception.
+  - This guarantees that SQS detects the processing failure, executes the 3 retry attempts, and moves the message
+    to the Dead-Letter Queue (DLQ).
+
+---
+
+5. SQS BATCH PROCESSING & PARTIAL BATCH FAILURE (BATCH SIZE 10 & WINDOW 10)
+--------------------------------------------------------------------------
+* SQS Queue Configuration (template.yml):
+  - Removed DelaySeconds (set to 0): SQS DelaySeconds delayed each message individually from its sent time,
+    causing messages to exit the delayed state one-by-one and triggering multiple Lambda invocations.
+  - Added ReceiveMessageWaitTimeSeconds: 20 (SQS Long Polling): Forces SQS to query all server partitions
+    and wait for messages to accumulate rather than returning 1 or 2 messages prematurely.
+* Lambda Event Source Mapping (template.yml):
+  - BatchSize: 10 (Maximum number of messages to pull in a single invocation).
+  - MaximumBatchingWindowInSeconds: 10 (Maximum duration to buffer and wait for up to 10 messages before invoking).
+  - FunctionResponseTypes: ['ReportBatchItemFailures'] (Only failed items are retried/sent to DLQ).
+
+

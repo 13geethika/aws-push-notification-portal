@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-const BACKEND_API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const BACKEND_API_URL = import.meta.env.VITE_API_URL;// || "http://localhost:5000/api";
 
 interface ChatMessage {
   id: string;
@@ -14,7 +14,6 @@ interface ChatMessage {
 
 export const NotificationPage = () => {
   const [deviceToken, setDeviceToken] = useState("");
-  const [endpointArn, setEndpointArn] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isBackendOnline, setIsBackendOnline] = useState(false);
@@ -146,8 +145,6 @@ export const NotificationPage = () => {
 
         const registerData = await registerResponse.json();
         if (registerResponse.ok && registerData.success) {
-          // Store the generated AWS SNS Platform Endpoint ARN
-          setEndpointArn(registerData.messageId); // messageId holds the registered endpointArn
           setRegStatus("Registered successfully with AWS SNS.");
         } else {
           throw new Error(registerData.error || "FCM registration with Spring Boot failed.");
@@ -187,14 +184,14 @@ export const NotificationPage = () => {
     setMessages((prev) => [...prev, newMsg]);
 
     try {
-      // POST the push message to Spring Boot
+      // POST the push message to backend API / API Gateway
       const response = await fetch(`${BACKEND_API_URL}/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          deviceToken: endpointArn || deviceToken.trim(), // Use registered ARN under the hood, fallback to token
+          deviceToken: deviceToken.trim(), // Dynamically takes the current input value
           message: messageText,
         }),
       });
@@ -250,7 +247,12 @@ export const NotificationPage = () => {
             className="input-field"
             placeholder="Awaiting registration token..."
             value={deviceToken}
-            onChange={(e) => setDeviceToken(e.target.value)}
+            onChange={(e) => {
+              setDeviceToken(e.target.value);
+              if (e.target.value) {
+                setRegStatus("Custom token entered (Dynamic)");
+              }
+            }}
           />
         </div>
 

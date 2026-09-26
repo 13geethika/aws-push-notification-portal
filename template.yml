@@ -109,6 +109,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       VisibilityTimeout: 30
+      DelaySeconds: 0
+      ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt PushNotificationDLQDev.Arn
         maxReceiveCount: 3
@@ -195,27 +197,39 @@ Resources:
           };
           const snsClient = new SNSClient({ region: getSnsRegion() });
           exports.handler = async (event) => {
+              console.log(`[BATCH START] Invocation received with ${event.Records.length} message(s).`);
+              const batchItemFailures = [];
+
               for (const record of event.Records) {
                   try {
                       const { deviceToken, message } = JSON.parse(record.body);
+                      if (!deviceToken || deviceToken.length < 50 || deviceToken.toLowerCase().includes("fail") || deviceToken.toLowerCase().includes("test") || deviceToken.toLowerCase().includes("invalid")) {
+                          console.error(`[BATCH ITEM FAILED] MessageId: ${record.messageId} failed validation for token "${deviceToken}".`);
+                          throw new Error(`Invalid token: "${deviceToken}"`);
+                      }
                       const endpointRes = await snsClient.send(new CreatePlatformEndpointCommand({ PlatformApplicationArn: PLATFORM_APPLICATION_ARN, Token: deviceToken }));
                       const endpointArn = endpointRes.EndpointArn;
                       const gcmPayload = JSON.stringify({ notification: { title: "New Message (DEV)", body: message, sound: "default" }, data: { title: "New Message", body: message } });
                       const fcmPayload = JSON.stringify({ message: { notification: { title: "New Message (DEV)", body: message } } });
                       const snsMessage = JSON.stringify({ default: message, GCM: gcmPayload, FCM: fcmPayload });
                       await snsClient.send(new PublishCommand({ TargetArn: endpointArn, Message: snsMessage, MessageStructure: "json" }));
+                      console.log(`[BATCH ITEM OK] MessageId: ${record.messageId} sent successfully.`);
                   } catch (error) {
-                      console.error("Worker error:", error);
-                      throw error;
+                      console.error(`[BATCH ITEM ERROR] MessageId: ${record.messageId} error:`, error.message);
+                      batchItemFailures.push({ itemIdentifier: record.messageId });
                   }
               }
-              return { status: "Done" };
+              console.log(`[BATCH SUMMARY] Total: ${event.Records.length}, Succeeded: ${event.Records.length - batchItemFailures.length}, Failed: ${batchItemFailures.length}`);
+              return { batchItemFailures };
           };
 
   SQSTriggerMappingDev:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
       BatchSize: 10
+      MaximumBatchingWindowInSeconds: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
       Enabled: true
       EventSourceArn: !GetAtt PushNotificationQueueDev.Arn
       FunctionName: !GetAtt PushNotificationWorkerDev.Arn
@@ -254,6 +268,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       VisibilityTimeout: 30
+      DelaySeconds: 0
+      ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt PushNotificationDLQProd.Arn
         maxReceiveCount: 3
@@ -340,27 +356,39 @@ Resources:
           };
           const snsClient = new SNSClient({ region: getSnsRegion() });
           exports.handler = async (event) => {
+              console.log(`[BATCH START] Invocation received with ${event.Records.length} message(s).`);
+              const batchItemFailures = [];
+
               for (const record of event.Records) {
                   try {
                       const { deviceToken, message } = JSON.parse(record.body);
+                      if (!deviceToken || deviceToken.length < 50 || deviceToken.toLowerCase().includes("fail") || deviceToken.toLowerCase().includes("test") || deviceToken.toLowerCase().includes("invalid")) {
+                          console.error(`[BATCH ITEM FAILED] MessageId: ${record.messageId} failed validation for token "${deviceToken}".`);
+                          throw new Error(`Invalid token: "${deviceToken}"`);
+                      }
                       const endpointRes = await snsClient.send(new CreatePlatformEndpointCommand({ PlatformApplicationArn: PLATFORM_APPLICATION_ARN, Token: deviceToken }));
                       const endpointArn = endpointRes.EndpointArn;
                       const gcmPayload = JSON.stringify({ notification: { title: "New Message (PROD)", body: message, sound: "default" }, data: { title: "New Message", body: message } });
                       const fcmPayload = JSON.stringify({ message: { notification: { title: "New Message (PROD)", body: message } } });
                       const snsMessage = JSON.stringify({ default: message, GCM: gcmPayload, FCM: fcmPayload });
                       await snsClient.send(new PublishCommand({ TargetArn: endpointArn, Message: snsMessage, MessageStructure: "json" }));
+                      console.log(`[BATCH ITEM OK] MessageId: ${record.messageId} sent successfully.`);
                   } catch (error) {
-                      console.error("Worker error:", error);
-                      throw error;
+                      console.error(`[BATCH ITEM ERROR] MessageId: ${record.messageId} error:`, error.message);
+                      batchItemFailures.push({ itemIdentifier: record.messageId });
                   }
               }
-              return { status: "Done" };
+              console.log(`[BATCH SUMMARY] Total: ${event.Records.length}, Succeeded: ${event.Records.length - batchItemFailures.length}, Failed: ${batchItemFailures.length}`);
+              return { batchItemFailures };
           };
 
   SQSTriggerMappingProd:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
       BatchSize: 10
+      MaximumBatchingWindowInSeconds: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
       Enabled: true
       EventSourceArn: !GetAtt PushNotificationQueueProd.Arn
       FunctionName: !GetAtt PushNotificationWorkerProd.Arn
@@ -399,6 +427,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       VisibilityTimeout: 30
+      DelaySeconds: 0
+      ReceiveMessageWaitTimeSeconds: 20
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt PushNotificationDLQDebug.Arn
         maxReceiveCount: 3
@@ -493,10 +523,16 @@ Resources:
           };
           const snsClient = new SNSClient({ region: getSnsRegion() });
           exports.handler = async (event) => {
-              console.log("[DEBUG LOGS] Processing enqueued records:", JSON.stringify(event, null, 2));
+              console.log(`[DEBUG LOGS] [BATCH START] Invocation received with ${event.Records.length} message(s).`);
+              const batchItemFailures = [];
+
               for (const record of event.Records) {
                   try {
                       const { deviceToken, message } = JSON.parse(record.body);
+                      if (!deviceToken || deviceToken.length < 50 || deviceToken.toLowerCase().includes("fail") || deviceToken.toLowerCase().includes("test") || deviceToken.toLowerCase().includes("invalid")) {
+                          console.log(`[DEBUG LOGS] [BATCH ITEM FAILED] MessageId: ${record.messageId} failed validation!`);
+                          throw new Error(`Device token validation failed: "${deviceToken}". Token is not a valid FCM device token.`);
+                      }
                       console.log("[DEBUG LOGS] Mapping device token to platform ARN:", deviceToken);
                       const endpointRes = await snsClient.send(new CreatePlatformEndpointCommand({ PlatformApplicationArn: PLATFORM_APPLICATION_ARN, Token: deviceToken }));
                       const endpointArn = endpointRes.EndpointArn;
@@ -506,19 +542,23 @@ Resources:
                       const snsMessage = JSON.stringify({ default: message, GCM: gcmPayload, FCM: fcmPayload });
                       console.log("[DEBUG LOGS] Publishing push via SNS...");
                       const result = await snsClient.send(new PublishCommand({ TargetArn: endpointArn, Message: snsMessage, MessageStructure: "json" }));
-                      console.log("[DEBUG LOGS] Notification successfully dispatched. SNS MessageId:", result.MessageId);
+                      console.log(`[DEBUG LOGS] [BATCH ITEM OK] Notification dispatched. MessageId: ${record.messageId}, SNS MessageId: ${result.MessageId}`);
                   } catch (error) {
-                      console.error("[DEBUG LOGS] Record processing failed:", error);
-                      throw error;
+                      console.error(`[DEBUG LOGS] [BATCH ITEM ERROR] MessageId: ${record.messageId} failed:`, error.message);
+                      batchItemFailures.push({ itemIdentifier: record.messageId });
                   }
               }
-              return { status: "Done" };
+              console.log(`[DEBUG LOGS] [BATCH COMPLETE] Total: ${event.Records.length}, Succeeded: ${event.Records.length - batchItemFailures.length}, Failed: ${batchItemFailures.length}`);
+              return { batchItemFailures };
           };
 
   SQSTriggerMappingDebug:
     Type: AWS::Lambda::EventSourceMapping
     Properties:
       BatchSize: 10
+      MaximumBatchingWindowInSeconds: 10
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
       Enabled: true
       EventSourceArn: !GetAtt PushNotificationQueueDebug.Arn
       FunctionName: !GetAtt PushNotificationWorkerDebug.Arn
