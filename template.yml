@@ -628,6 +628,15 @@ Resources:
             Condition:
               StringEquals:
                 AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+          - Sid: AllowCloudFrontListBucket
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: 's3:ListBucket'
+            Resource: !Sub 'arn:aws:s3:::${FrontendBucket}'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
 
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
