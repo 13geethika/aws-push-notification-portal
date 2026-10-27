@@ -110,5 +110,23 @@ This guarantees consistent deployment across all environments under the AWS Free
   - Frontend: `npm run dev` in `frontend/` (runs on http://localhost:5173).
   - Backend: CloudFormation `template.yml` deployed in AWS (fully serverless, 24/7 online).
 
+---
+
+7. AWS CLOUDFRONT CDN & S3 GLOBAL DISTRIBUTION (ZERO-COST / FREE-TIER OPTIMIZED)
+--------------------------------------------------------------------------------
+* Architecture Enhancement:
+  - Added Amazon S3 bucket (`FrontendBucket`) for global React SPA static asset hosting.
+  - Added Origin Access Control (`CloudFrontOriginAccessControl` - OAC): Modern, secure S3 access restricted strictly to CloudFront.
+  - Added CloudFront Distribution (`CloudFrontDistribution`):
+    * Origin 1 (S3): Default cache behavior (`/*`) with Managed-CachingOptimized policy for high-speed edge delivery.
+    * Origin 2 (API Gateway): Cache behaviors for `/dev/*`, `/prod/*`, `/debug/*` with Managed-CachingDisabled policy.
+    * Single-Domain Architecture: Solves CORS completely (UI and API served under the same https://dXXX.cloudfront.net domain).
+    * Custom Error Responses: Automatically rewrites 403/404 to /index.html (200 OK) for seamless React client-side routing.
+* Cost & Free-Tier Guarantees:
+  - PriceClass: `PriceClass_100` (Restricts edge routing to NA and Europe, eliminating higher-cost edge routing).
+  - AWS Free Tier: CloudFront gives 1 TB data transfer out and 10,000,000 requests FREE per month forever.
+  - AWS WAF: Omitted to prevent any accidental monthly Web ACL charges ($0/mo cost).
+
+
 
 
