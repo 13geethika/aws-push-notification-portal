@@ -641,7 +641,8 @@ Resources:
         Origins:
           - Id: S3FrontendOrigin
             DomainName: !GetAtt FrontendBucket.RegionalDomainName
-            S3OriginConfig: {}
+            S3OriginConfig:
+              OriginAccessIdentity: ''
             OriginAccessControlId: !GetAtt CloudFrontOriginAccessControl.Id
           - Id: ApiGatewayOrigin
             DomainName: !Sub "${PushApiGateway}.execute-api.${AWS::Region}.amazonaws.com"
@@ -655,7 +656,13 @@ Resources:
           AllowedMethods: [GET, HEAD, OPTIONS]
           CachedMethods: [GET, HEAD, OPTIONS]
           Compress: true
-          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 0
+          DefaultTTL: 86400
+          MaxTTL: 31536000
         CacheBehaviors:
           - PathPattern: '/dev/*'
             TargetOriginId: ApiGatewayOrigin
@@ -663,24 +670,54 @@ Resources:
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [GET, HEAD, OPTIONS]
             Compress: true
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a8409e4ad
-            OriginRequestPolicyId: b684b0cd-5f57-4d11-a83d-5f136e76c8e3
+            ForwardedValues:
+              QueryString: true
+              Cookies:
+                Forward: all
+              Headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - Referer
+            MinTTL: 0
+            DefaultTTL: 0
+            MaxTTL: 0
           - PathPattern: '/prod/*'
             TargetOriginId: ApiGatewayOrigin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [GET, HEAD, OPTIONS]
             Compress: true
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a8409e4ad
-            OriginRequestPolicyId: b684b0cd-5f57-4d11-a83d-5f136e76c8e3
+            ForwardedValues:
+              QueryString: true
+              Cookies:
+                Forward: all
+              Headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - Referer
+            MinTTL: 0
+            DefaultTTL: 0
+            MaxTTL: 0
           - PathPattern: '/debug/*'
             TargetOriginId: ApiGatewayOrigin
             ViewerProtocolPolicy: redirect-to-https
             AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [GET, HEAD, OPTIONS]
             Compress: true
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a8409e4ad
-            OriginRequestPolicyId: b684b0cd-5f57-4d11-a83d-5f136e76c8e3
+            ForwardedValues:
+              QueryString: true
+              Cookies:
+                Forward: all
+              Headers:
+                - Accept
+                - Authorization
+                - Content-Type
+                - Referer
+            MinTTL: 0
+            DefaultTTL: 0
+            MaxTTL: 0
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 200
