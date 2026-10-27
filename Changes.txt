@@ -92,4 +92,23 @@ This guarantees consistent deployment across all environments under the AWS Free
   - MaximumBatchingWindowInSeconds: 10 (Maximum duration to buffer and wait for up to 10 messages before invoking).
   - FunctionResponseTypes: ['ReportBatchItemFailures'] (Only failed items are retried/sent to DLQ).
 
+---
+
+6. PURE AWS + REACT TRANSITION (REMOVED SPRING BOOT RUNTIME DEPENDENCY)
+------------------------------------------------------------------------
+* Architecture Transition:
+  - Previous: React Client -> Spring Boot (local:5000 / ngrok) -> SQS -> Lambda Worker -> SNS -> FCM.
+  - New:      React Client -> AWS API Gateway HTTP API -> PushApiLambda -> SQS -> PushNotificationWorker -> SNS -> FCM.
+* Spring Boot Files Preserved:
+  - All existing Java/Spring Boot files in the `backend/` directory are preserved untouched.
+  - Spring Boot is no longer needed to run the project.
+* Frontend Updates (NotificationPage.tsx):
+  - All API calls (GET /health, GET /config, POST /register, POST /send) directly connect to AWS API Gateway.
+  - Cleaned up all UI labels, offline alerts, and error messages to reflect AWS API Gateway connectivity.
+  - Environment endpoints configured via VITE_API_URL in .env, .env.dev, .env.prod, and .env.debug.
+* How to Run:
+  - Frontend: `npm run dev` in `frontend/` (runs on http://localhost:5173).
+  - Backend: CloudFormation `template.yml` deployed in AWS (fully serverless, 24/7 online).
+
+
 

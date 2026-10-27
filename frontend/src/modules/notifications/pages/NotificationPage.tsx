@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { initializeApp } from "firebase/app";
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-const BACKEND_API_URL = import.meta.env.VITE_API_URL;// || "http://localhost:5000/api";
+const BACKEND_API_URL = import.meta.env.VITE_API_URL;
 
 interface ChatMessage {
   id: string;
@@ -30,29 +30,29 @@ export const NotificationPage = () => {
   useEffect(() => {
     const initializeWebPush = async () => {
       try {
-        // 1. Check health of Spring Boot server
+        // 1. Check health of AWS API Gateway backend
         const healthResponse = await fetch(`${BACKEND_API_URL}/health`, {
           signal: AbortSignal.timeout(2000),
         });
         if (!healthResponse.ok) {
           setIsBackendOnline(false);
           setCheckingHealth(false);
-          setRegStatus("Spring Boot backend offline.");
+          setRegStatus("AWS API Gateway backend offline.");
           return;
         }
         setIsBackendOnline(true);
 
-        // 2. Fetch Firebase Web Credentials from Spring Boot config endpoint
+        // 2. Fetch Firebase Web Credentials from API Gateway config endpoint
         setRegStatus("Fetching configurations...");
         const configResponse = await fetch(`${BACKEND_API_URL}/config`);
         if (!configResponse.ok) {
-          throw new Error("Failed to load Firebase configuration from Spring Boot.");
+          throw new Error("Failed to load Firebase configuration from AWS API Gateway.");
         }
         const config = await configResponse.json();
 
         // Validate config
         if (!config.apiKey || !config.messagingSenderId || !config.vapidKey) {
-          setRegStatus("FCM Web Config not fully set in Spring Boot properties.");
+          setRegStatus("FCM Web Config not fully set in AWS API Gateway properties.");
           setCheckingHealth(false);
           return;
         }
@@ -133,7 +133,7 @@ export const NotificationPage = () => {
         }
         setDeviceToken(fcmToken); // Set raw device token in the input box!
 
-        // 7. Register the token with Spring Boot to obtain AWS Platform Endpoint ARN
+        // 7. Register the token with AWS API Gateway to obtain AWS Platform Endpoint ARN
         setRegStatus("Registering endpoint with AWS SNS...");
         const registerResponse = await fetch(`${BACKEND_API_URL}/register`, {
           method: "POST",
@@ -147,7 +147,7 @@ export const NotificationPage = () => {
         if (registerResponse.ok && registerData.success) {
           setRegStatus("Registered successfully with AWS SNS.");
         } else {
-          throw new Error(registerData.error || "FCM registration with Spring Boot failed.");
+          throw new Error(registerData.error || "FCM registration with AWS API Gateway failed.");
         }
       } catch (err: any) {
         console.error("Web Push Initialization Error:", err);
@@ -166,7 +166,7 @@ export const NotificationPage = () => {
     if (!inputValue.trim() || !deviceToken.trim()) return;
 
     if (!isBackendOnline) {
-      alert("Cannot send: Spring Boot API Server is offline.");
+      alert("Cannot send: AWS API Gateway backend is offline.");
       return;
     }
 
@@ -184,7 +184,7 @@ export const NotificationPage = () => {
     setMessages((prev) => [...prev, newMsg]);
 
     try {
-      // POST the push message to backend API / API Gateway
+      // POST the push message to AWS API Gateway
       const response = await fetch(`${BACKEND_API_URL}/send`, {
         method: "POST",
         headers: {
@@ -206,10 +206,10 @@ export const NotificationPage = () => {
           )
         );
       } else {
-        throw new Error(data.error || "Failed to send notification via backend API.");
+        throw new Error(data.error || "Failed to send notification via AWS API Gateway.");
       }
     } catch (err: any) {
-      console.error("Spring Boot API send error:", err);
+      console.error("AWS API send error:", err);
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === messageId
@@ -229,8 +229,8 @@ export const NotificationPage = () => {
       {/* Connection Offline alert */}
       {!isBackendOnline && !checkingHealth && (
         <div className="alert-box error">
-          <strong>Connection Offline:</strong> The Spring Boot API Server is not responding. 
-          Please configure your AWS properties and launch the project on port 5000.
+          <strong>Connection Offline:</strong> The AWS API Gateway backend is not responding. 
+          Please verify that your CloudFormation stack is deployed and your VITE_API_URL in .env points to your API Gateway endpoint.
         </div>
       )}
 
